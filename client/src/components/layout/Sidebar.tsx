@@ -17,7 +17,7 @@ import Logo from "@/components/brand/Logo";
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { logoutMutation } = useAuth();
+  const { logout } = useAuth();
 
   const isActive = (path: string) => {
     // Special handling for dashboard to ensure it's properly highlighted
@@ -62,16 +62,8 @@ export default function Sidebar() {
   );
 
   const handleLogout = () => {
-    // Add a confirmation before logout
     if (confirm("Are you sure you want to log out?")) {
-      // Manually clear any critical caches before calling the mutation
-      sessionStorage.removeItem('wasAuthenticated');
-      localStorage.removeItem('dashboard_accessible');
-      
-      // Now trigger the logout mutation which will handle the rest
-      logoutMutation.mutate();
-      
-      // Force a redirect to home after a short delay to ensure we exit the app
+      logout();
       setTimeout(() => {
         window.location.href = '/';
       }, 500);
@@ -175,10 +167,9 @@ export default function Sidebar() {
             "transition-all duration-200 ease-out",
             "hover:bg-red-100"
           )}
-          disabled={logoutMutation.isPending}
         >
           <LogOut className="h-5 w-5 mr-3 text-red-500" />
-          <span className="text-sm">{logoutMutation.isPending ? "Logging out..." : "Log Out"}</span>
+          <span className="text-sm">Log Out</span>
         </button>
       </div>
     </div>

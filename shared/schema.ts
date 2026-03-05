@@ -101,7 +101,8 @@ export const users = pgTable("users", {
   name: text("name"),
   email: text("email").unique(),
   emailVerified: boolean("email_verified").default(false),
-  firebaseUid: text("firebase_uid").unique(), // For Firebase integration
+  walletAddress: text("wallet_address").unique(), // ThirdWeb wallet address (primary auth)
+  firebaseUid: text("firebase_uid").unique(), // Legacy Firebase integration
   profileImage: text("profile_image"),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
@@ -277,18 +278,13 @@ export const insertUserSchema = createInsertSchema(users)
     resetTokenExpiry: true,
     lastLogin: true,
     firebaseUid: true,
+    walletAddress: true,
   })
   .extend({
     username: z.string().min(3, "Username must be at least 3 characters"),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-      .regex(/[0-9]/, "Password must contain at least one number")
-      .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+    password: z.string().min(1, "Password is required"),
     name: z.string().optional(),
-    email: z.string().email("Please enter a valid email"),
+    email: z.string().email("Please enter a valid email").optional().or(z.literal("")),
     profileImage: z.string().optional(),
   });
 

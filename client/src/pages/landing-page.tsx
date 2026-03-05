@@ -1,44 +1,34 @@
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import Logo from "@/components/brand/Logo";
-import { ArrowRight, Check, User } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
+import { ArrowRight, Check, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getQueryFn } from "@/lib/queryClient";
+import { authFetch } from "@/hooks/use-auth";
 
 export default function LandingPage() {
   const [, navigate] = useLocation();
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  
-  // We'll check authentication status and show appropriate UI
-  // This allows the landing page to be seen by everyone but with personalized header
-  
-  // Fetch user data directly to avoid context issues
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        // Directly fetch the user data with fetch API
-        const response = await fetch('/api/user');
+        const response = await authFetch("/api/user");
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
-          
-          // Don't auto-redirect on landing page - let users choose where to go
         } else {
           setUser(null);
         }
-      } catch (error) {
-        console.error("Error fetching user:", error);
+      } catch {
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
-    
     fetchUser();
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-white to-neutral-50">
@@ -51,40 +41,27 @@ export default function LandingPage() {
               Welcome back, <span className="font-medium">{user.name || user.username}</span>
             </div>
             <Link href="/dashboard">
-              <Button 
-                className="bg-neutral-900 hover:bg-black text-white px-5 py-2 h-10 font-normal transition-colors shadow-sm hover:shadow-md rounded-full flex items-center gap-2"
-              >
+              <Button className="bg-neutral-900 hover:bg-black text-white px-5 py-2 h-10 font-normal transition-colors shadow-sm hover:shadow-md rounded-full flex items-center gap-2">
                 Go to Dashboard
                 <Avatar className="h-6 w-6 ml-1">
                   {user.profileImage && <AvatarImage src={user.profileImage} />}
                   <AvatarFallback className="text-xs bg-primary text-white">
-                    {user.name ? user.name.charAt(0).toUpperCase() : user.username.charAt(0).toUpperCase()}
+                    {(user.name || user.username || "U").charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             </Link>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            <Link href="/login">
-              <Button 
-                variant="ghost" 
-                className="text-neutral-600 hover:text-black font-normal px-5 py-2 h-10 transition-all hidden sm:flex"
-              >
-                Sign in
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button 
-                className="bg-neutral-900 hover:bg-black text-white px-5 py-2 h-10 font-normal transition-colors shadow-sm hover:shadow-md rounded-full"
-              >
-                Create account
-              </Button>
-            </Link>
-          </div>
+          <Link href="/auth">
+            <Button className="bg-neutral-900 hover:bg-black text-white px-5 py-2 h-10 font-normal transition-colors shadow-sm hover:shadow-md rounded-full flex items-center gap-2">
+              <Wallet className="h-4 w-4 mr-1" />
+              Connect / Sign In
+            </Button>
+          </Link>
         )}
       </header>
-      
+
       {/* Hero Section */}
       <section className="flex-grow flex flex-col items-center justify-center px-6 py-16 md:py-20">
         <div className="max-w-4xl text-center">
@@ -94,27 +71,16 @@ export default function LandingPage() {
           <p className="text-lg md:text-xl text-neutral-600 mb-10 md:mb-12 max-w-2xl mx-auto">
             One elegant workspace for tracking investments, budgeting, and achieving your financial goals.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Link href="/register">
-              <Button 
-                className="bg-neutral-900 hover:bg-black text-white text-base font-normal w-full sm:w-auto px-8 py-6 h-auto rounded-full shadow-sm hover:shadow-md transition-all"
-              >
-                Get started for free
+            <Link href="/auth">
+              <Button className="bg-neutral-900 hover:bg-black text-white text-base font-normal w-full sm:w-auto px-8 py-6 h-auto rounded-full shadow-sm hover:shadow-md transition-all">
+                Get started
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/login">
-              <Button
-                variant="outline"
-                className="border-neutral-300 hover:bg-neutral-100 text-neutral-800 w-full sm:w-auto px-8 py-6 h-auto rounded-full font-normal transition-all flex items-center justify-center"
-              >
-                <SiGoogle className="mr-2 h-4 w-4" />
-                Sign in with Google
-              </Button>
-            </Link>
           </div>
-          
+
           {/* Feature highlights */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-4xl mx-auto text-left mt-8">
             <div className="bg-white p-6 rounded-xl shadow-sm">
@@ -140,14 +106,14 @@ export default function LandingPage() {
                 <div className="bg-neutral-100 p-2 rounded-full mr-3">
                   <Check className="h-4 w-4 text-neutral-800" />
                 </div>
-                <h3 className="font-medium text-neutral-800">Privacy-Focused</h3>
+                <h3 className="font-medium text-neutral-800">Web3 Ready</h3>
               </div>
-              <p className="text-neutral-600 text-sm">Your data stays private and secure with bank-level encryption and authentication.</p>
+              <p className="text-neutral-600 text-sm">Connect with your wallet or email. Your data stays private and secure.</p>
             </div>
           </div>
         </div>
       </section>
-      
+
       {/* Footer */}
       <footer className="py-8 border-t border-neutral-200">
         <div className="container mx-auto text-center text-neutral-500 text-sm">

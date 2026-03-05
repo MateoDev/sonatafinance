@@ -1,5 +1,16 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const TOKEN_KEY = "sonata_session_token";
+
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -14,9 +25,8 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: getAuthHeaders(),
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
   });
 
   await throwIfResNotOk(res);
@@ -30,39 +40,9 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const path = queryKey[0] as string;
-    
-    // Check if we're in dev mode with mock data
-    // @ts-ignore
-    if (window.devAuth && window.devAuth.enableDevBypass) {
-      // @ts-ignore
-      const devAuth = window.devAuth;
-      
-      // Return mock data based on the endpoint
-      if (path === '/api/investments') {
-        return devAuth.mockInvestments as unknown as T;
-      }
-      if (path === '/api/activities/recent') {
-        return devAuth.mockActivities as unknown as T;
-      }
-      if (path === '/api/portfolio/allocation') {
-        return devAuth.mockAllocation as unknown as T;
-      }
-      if (path === '/api/portfolio/performance') {
-        return devAuth.mockPerformance as unknown as T;
-      }
-      if (path === '/api/portfolio/summary') {
-        return devAuth.mockSummary as unknown as T;
-      }
-      if (path === '/api/user') {
-        return devAuth.mockUser as unknown as T;
-      }
-      if (path === '/api/notes') {
-        return devAuth.mockNotes as unknown as T;
-      }
-    }
-    
+
     const res = await fetch(path, {
-      credentials: "include",
+      headers: getAuthHeaders(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

@@ -98,6 +98,7 @@ export interface IStorage {
   getUserById(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByWalletAddress(walletAddress: string): Promise<User | undefined>;
   getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined>;
   getUserByResetToken(resetToken: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
@@ -300,6 +301,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values()).find(user => user.email === email);
   }
   
+  async getUserByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user => user.walletAddress === walletAddress);
+  }
+
   async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
     return Array.from(this.users.values()).find(user => user.firebaseUid === firebaseUid);
   }
@@ -1493,6 +1498,12 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
   
+  async getUserByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    if (!walletAddress) return undefined;
+    const [user] = await db.select().from(users).where(eq(users.walletAddress, walletAddress));
+    return user || undefined;
+  }
+
   async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
     if (!firebaseUid) return undefined;
     const [user] = await db.select().from(users).where(eq(users.firebaseUid, firebaseUid));

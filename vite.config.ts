@@ -5,6 +5,9 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_THIRDWEB_CLIENT_ID': JSON.stringify(process.env.THIRDWEB_CLIENT_ID || 'bda3a3f4636f7c3e056ad696ea93b615'),
+  },
   plugins: [
     react(),
     runtimeErrorOverlay(),

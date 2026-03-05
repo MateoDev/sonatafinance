@@ -36,7 +36,7 @@ interface HeaderProps {
 
 export default function Header({ title }: HeaderProps = {}) {
   const [location] = useLocation();
-  const { user, logoutMutation } = useAuth();
+  const { user, logout } = useAuth();
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   
   // Use authenticated user
@@ -60,7 +60,8 @@ export default function Header({ title }: HeaderProps = {}) {
   };
 
   const handleLogout = () => {
-    logoutMutation.mutate();
+    logout();
+    setTimeout(() => { window.location.href = '/'; }, 500);
   };
 
   return (
@@ -161,11 +162,11 @@ export default function Header({ title }: HeaderProps = {}) {
                   
                   <button
                     onClick={handleLogout}
-                    disabled={logoutMutation.isPending}
+                    
                     className="flex items-center w-full px-5 py-3 rounded-xl text-red-600 hover:bg-red-100"
                   >
                     <LogOut className="h-5 w-5 mr-3 text-red-500" />
-                    <span className="text-sm">{logoutMutation.isPending ? "Logging out..." : "Log Out"}</span>
+                    <span className="text-sm">{"Log Out"}</span>
                   </button>
                 </div>
               </div>
@@ -241,10 +242,10 @@ export default function Header({ title }: HeaderProps = {}) {
               <DropdownMenuItem 
                 className="cursor-pointer text-red-600 focus:text-red-600"
                 onClick={handleLogout}
-                disabled={logoutMutation.isPending}
+                
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>{logoutMutation.isPending ? "Logging out..." : "Log out"}</span>
+                <span>{"Log out"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
