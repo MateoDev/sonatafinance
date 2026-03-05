@@ -5,10 +5,10 @@ if (!process.env.OPENAI_API_KEY) {
   console.error("WARNING: OPENAI_API_KEY environment variable is not set. Chat functionality will not work properly.");
 }
 
-// Initialize OpenAI client
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI client (lazy — only crashes when actually called without key)
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : (null as unknown as OpenAI);
 
 // Define a type for our messages
 type ChatMessage = {

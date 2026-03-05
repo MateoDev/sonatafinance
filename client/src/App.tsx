@@ -14,6 +14,7 @@ import NewLiability from "@/pages/NewLiability";
 import GoalsPage from "@/pages/GoalsPage";
 import LandingPage from "@/pages/landing-page";
 import AuthPage from "@/pages/auth-page";
+import Onboarding from "@/pages/onboarding";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
 import Chat from "@/pages/Chat";
@@ -33,6 +34,9 @@ function App() {
         </Route>
         <Route path="/login">
           <AuthPage />
+        </Route>
+        <Route path="/onboarding">
+          <Onboarding />
         </Route>
 
         {/* Protected routes */}

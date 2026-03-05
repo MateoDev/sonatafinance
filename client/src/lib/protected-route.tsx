@@ -30,6 +30,16 @@ export function ProtectedRoute({
     );
   }
 
+  // Redirect to onboarding if profile isn't set up
+  const needsOnboarding = !user.name || user.name === "" || user.username?.startsWith("wallet_");
+  if (needsOnboarding) {
+    return (
+      <Route path={path}>
+        <Redirect to="/onboarding" />
+      </Route>
+    );
+  }
+
   return (
     <Route path={path}>
       <Component />

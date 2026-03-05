@@ -107,8 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData);
       queryClient.setQueryData(["/api/user"], userData);
 
+      // Check if this is a new user who needs onboarding
+      const isNewUser = !userData.name || userData.name === "" || userData.username?.startsWith("wallet_");
+      if (isNewUser) {
+        window.location.href = "/onboarding";
+        return;
+      }
+
       toast({
-        title: "Welcome!",
+        title: "Welcome back!",
         description: `Signed in as ${userData.name || userData.username || walletAddress.slice(0, 8) + "..."}`,
       });
     } catch (err: any) {
