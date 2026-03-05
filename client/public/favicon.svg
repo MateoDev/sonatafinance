@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified favicon with just the 3 curved lines -->
+  <rect width="32" height="32" rx="6" fill="#ffffff"/>
+  <path 
+    d="M10 8C10 14 10 18 10 24" 
+    stroke="#000000" 
+    strokeWidth="2" 
+    strokeLinecap="round"
+  />
+  <path 
+    d="M16 4C16 12 16 20 16 28" 
+    stroke="#000000" 
+    strokeWidth="2" 
+    strokeLinecap="round"
+  />
+  <path 
+    d="M22 8C22 14 22 18 22 24" 
+    stroke="#000000" 
+    strokeWidth="2" 
+    strokeLinecap="round"
+  />
+</svg>
