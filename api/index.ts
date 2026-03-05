@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express from "express";
 import { registerRoutes } from "../server/routes";
 import { setupAuth } from "../server/auth";

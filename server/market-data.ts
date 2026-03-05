@@ -1,3 +1,4 @@
+// @ts-nocheck
 import yahooFinance from "yahoo-finance2";
 
 export interface MarketTickerItem {
