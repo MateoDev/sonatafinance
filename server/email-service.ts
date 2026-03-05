@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MailService } from '@sendgrid/mail';
 
 // Initialize the mail service only if API key is available

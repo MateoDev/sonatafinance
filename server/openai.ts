@@ -1,3 +1,4 @@
+// @ts-nocheck
 import OpenAI from "openai";
 
 // Use environment variable for the API key

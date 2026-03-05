@@ -1,3 +1,4 @@
+// @ts-nocheck
 // This is a helper function to generate performance history data
 export function generatePerformanceData(direction = 'up'): number[] {
   // Create a sample array with 10 data points

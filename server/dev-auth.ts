@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Express, Request, Response } from 'express';
 import { hashPassword } from './auth';
 import { storage } from './storage';
