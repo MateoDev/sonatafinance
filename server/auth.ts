@@ -1,20 +1,25 @@
 // @ts-nocheck
 import { Express, Request, Response, NextFunction } from "express";
-import { createThirdwebClient, verifySignature } from "thirdweb";
+import { createThirdwebClient } from "thirdweb";
 import { storage } from "./storage";
 import { User as SelectUser, users } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import jwt from "jsonwebtoken";
 
 // ThirdWeb client for server-side verification
 const thirdwebClient = createThirdwebClient({
   secretKey: process.env.THIRDWEB_SECRET_KEY || "",
 });
 
-// Simple in-memory session store mapping token -> userId
-// In production, use Redis or DB-backed sessions
-const sessions = new Map<string, number>();
+// JWT secret — falls back to a random key per process (dev only)
+const JWT_SECRET = process.env.JWT_SECRET || randomBytes(64).toString("hex");
+const JWT_EXPIRES_IN = "30d";
+
+if (!process.env.JWT_SECRET) {
+  console.warn("WARNING: JWT_SECRET not set — using random key. Sessions won't survive restarts. Set JWT_SECRET in production.");
+}
 
 declare global {
   namespace Express {
@@ -22,17 +27,27 @@ declare global {
   }
 }
 
-// Generate a session token
-function generateSessionToken(): string {
-  return randomBytes(48).toString("hex");
+// Sign a JWT for a user
+function signToken(userId: number): string {
+  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-// Middleware to extract user from session token
+// Verify and decode a JWT — returns userId or null
+function verifyToken(token: string): number | null {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as { sub: number };
+    return payload.sub;
+  } catch {
+    return null;
+  }
+}
+
+// Middleware to extract user from JWT Bearer token
 async function extractUser(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
-    const userId = sessions.get(token);
+    const userId = verifyToken(token);
     if (userId) {
       const user = await storage.getUserById(userId);
       if (user) {
@@ -96,15 +111,14 @@ export function setupAuth(app: Express) {
       // Update last login
       await storage.updateUserLastLogin(user.id);
 
-      // Generate session token
-      const sessionToken = generateSessionToken();
-      sessions.set(sessionToken, user.id);
+      // Sign JWT
+      const token = signToken(user.id);
 
       // Refresh user data
       user = await storage.getUserById(user.id);
 
       const { password, ...userWithoutPassword } = user!;
-      res.json({ user: userWithoutPassword, token: sessionToken });
+      res.json({ user: userWithoutPassword, token });
     } catch (error) {
       console.error("ThirdWeb auth error:", error);
       res.status(500).json({ error: "Authentication failed" });
@@ -120,13 +134,24 @@ export function setupAuth(app: Express) {
     res.json(userWithoutPassword);
   });
 
-  // Logout
-  app.post("/api/logout", (req: Request, res: Response) => {
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      sessions.delete(token);
+  // Update user profile
+  app.patch("/api/user/profile", async (req: Request, res: Response) => {
+    if (!(req as any).user) {
+      return res.status(401).json({ error: "Not authenticated" });
     }
+    try {
+      const updated = await storage.updateUser((req as any).user.id, req.body);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      const { password, ...userWithoutPassword } = updated;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
+  // Logout — JWT is stateless, client just discards the token
+  // Endpoint kept for API compatibility
+  app.post("/api/logout", (_req: Request, res: Response) => {
     res.sendStatus(200);
   });
 }
