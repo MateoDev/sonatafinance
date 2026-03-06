@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         result = await db.query(
           `INSERT INTO users (username, password, name, email, wallet_address, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
-          [username, "disabled", name || "", email || "", addr]
+          [username, "disabled", name || "", email || null, addr]
         );
         user = result.rows[0];
       }
