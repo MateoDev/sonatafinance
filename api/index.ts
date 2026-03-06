@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Update last login
-      await db.query("UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1", [user.id]);
+      await db.query("UPDATE users SET last_login = NOW(), updated_at = NOW() WHERE id = $1", [user.id]);
 
       // Generate simple session token
       const crypto = await import("crypto");
