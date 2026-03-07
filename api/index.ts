@@ -194,6 +194,160 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ok: true });
     }
 
+    // POST /api/agent/chat
+    if (url.includes("/api/agent/chat") && method === "POST") {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey || apiKey === "sk-placeholder") {
+        return res.json({ message: "🔑 Agent requires an Anthropic API key to be configured. Contact your admin to set ANTHROPIC_API_KEY." });
+      }
+
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const userId = payload.userId;
+      const { message: userMessage, history, action: confirmedAction } = req.body || {};
+
+      // Handle confirmed actions
+      if (userMessage === "__confirm_action__" && confirmedAction) {
+        try {
+          let result: any = { ok: true };
+          const p = confirmedAction.params || {};
+          switch (confirmedAction.action) {
+            case "update_budget":
+              await db.query(
+                `INSERT INTO budget_grid (user_id, category, month, value, updated_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (user_id, category, month) DO UPDATE SET value = $4, updated_at = NOW()`,
+                [userId, p.category, p.month, p.value]
+              );
+              result = { updated: true, ...p };
+              break;
+            case "add_investment":
+              await db.query(
+                `INSERT INTO investments (user_id, name, type, cost_basis, current_value, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+                [userId, p.name, p.type || "other", p.cost_basis || 0, p.current_value || p.cost_basis || 0]
+              );
+              result = { added: true, ...p };
+              break;
+            case "update_investment":
+              await db.query(`UPDATE investments SET current_value = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.current_value, p.id, userId]);
+              result = { updated: true, ...p };
+              break;
+            case "add_liability":
+              await db.query(
+                `INSERT INTO liabilities (user_id, name, type, original_amount, current_balance, interest_rate, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+                [userId, p.name, p.type || "other", p.original_amount || 0, p.current_balance || p.original_amount || 0, p.interest_rate || 0]
+              );
+              result = { added: true, ...p };
+              break;
+            case "update_liability":
+              await db.query(`UPDATE liabilities SET current_balance = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.current_balance, p.id, userId]);
+              result = { updated: true, ...p };
+              break;
+            default:
+              return res.json({ message: "Unknown action type." });
+          }
+          return res.json({ message: `✅ Done! ${confirmedAction.action} executed successfully.`, data: result });
+        } catch (err: any) {
+          return res.json({ message: `❌ Failed to execute action: ${err.message}` });
+        }
+      }
+
+      // Gather user data for context
+      const [invRes, liabRes, budgetRes, summaryInv, summaryLiab] = await Promise.all([
+        db.query("SELECT id, name, type, cost_basis, current_value FROM investments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
+        db.query("SELECT id, name, type, original_amount, current_balance, interest_rate FROM liabilities WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
+        db.query("SELECT category, month, value FROM budget_grid WHERE user_id = $1 ORDER BY category, month LIMIT 200", [userId]),
+        db.query("SELECT * FROM investments WHERE user_id = $1", [userId]),
+        db.query("SELECT * FROM liabilities WHERE user_id = $1", [userId]),
+      ]);
+
+      const totalAssets = summaryInv.rows.reduce((s: number, r: any) => s + parseFloat(r.current_value || r.cost_basis || 0), 0);
+      const totalLiabilities = summaryLiab.rows.reduce((s: number, r: any) => s + parseFloat(r.current_balance || r.original_amount || 0), 0);
+
+      const dataSummary = `
+## Portfolio Summary
+- Total Assets: $${totalAssets.toLocaleString()}
+- Total Liabilities: $${totalLiabilities.toLocaleString()}
+- Net Worth: $${(totalAssets - totalLiabilities).toLocaleString()}
+
+## Investments (${invRes.rows.length})
+${invRes.rows.map((r: any) => `- [ID:${r.id}] ${r.name} (${r.type}): cost $${r.cost_basis}, current $${r.current_value}`).join("\n") || "None"}
+
+## Liabilities (${liabRes.rows.length})
+${liabRes.rows.map((r: any) => `- [ID:${r.id}] ${r.name} (${r.type}): original $${r.original_amount}, balance $${r.current_balance}, rate ${r.interest_rate}%`).join("\n") || "None"}
+
+## Budget Grid (${budgetRes.rows.length} cells)
+${budgetRes.rows.slice(0, 50).map((r: any) => `- ${r.category} | ${r.month}: $${r.value}`).join("\n") || "None"}`;
+
+      const systemPrompt = `You are Sonata, a friendly and concise financial assistant embedded in the Sonata Finance app. You help manage the user's personal finances.
+
+You can view and modify their budget, investments, liabilities, and subscriptions.
+
+Current user data:
+${dataSummary}
+
+RULES:
+- For read/query questions, answer directly using the data above. Be concise.
+- For write/modification requests, respond with a friendly confirmation message AND include exactly one JSON action block on its own line, wrapped in \`\`\`json ... \`\`\` fences.
+- Available actions and their params:
+  - update_budget: { "action": "update_budget", "params": { "month": "Mar '26", "category": "Rent", "value": 4500 } }
+  - add_investment: { "action": "add_investment", "params": { "name": "AAPL", "type": "stock", "cost_basis": 10000, "current_value": 12000 } }
+  - update_investment: { "action": "update_investment", "params": { "id": 123, "current_value": 15000 } }
+  - add_liability: { "action": "add_liability", "params": { "name": "Car Loan", "type": "loan", "original_amount": 25000, "current_balance": 20000, "interest_rate": 5.5 } }
+  - update_liability: { "action": "update_liability", "params": { "id": 456, "current_balance": 18000 } }
+- Only include an action block when the user is requesting a change. For queries, just respond with text.
+- Keep responses short and helpful. Use $ formatting for money.`;
+
+      const claudeMessages = (history || []).slice(-10).map((m: any) => ({ role: m.role, content: m.content }));
+      if (!claudeMessages.length || claudeMessages[claudeMessages.length - 1]?.content !== userMessage) {
+        claudeMessages.push({ role: "user", content: userMessage });
+      }
+
+      try {
+        const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1024, system: systemPrompt, messages: claudeMessages }),
+        });
+        const claudeData = await claudeRes.json();
+        if (claudeData.error) {
+          return res.json({ message: `⚠️ AI error: ${claudeData.error.message || JSON.stringify(claudeData.error)}` });
+        }
+
+        const text = claudeData.content?.[0]?.text || "I couldn't generate a response.";
+
+        // Parse action block if present
+        const actionMatch = text.match(/```json\s*\n?([\s\S]*?)\n?```/);
+        let action = null;
+        let cleanText = text;
+        if (actionMatch) {
+          try {
+            action = JSON.parse(actionMatch[1]);
+            cleanText = text.replace(/```json\s*\n?[\s\S]*?\n?```/, "").trim();
+          } catch {}
+        }
+
+        // Check if response references data the user might want to see
+        let data = null;
+        const lowerMsg = userMessage.toLowerCase();
+        if (lowerMsg.includes("investment")) data = invRes.rows;
+        else if (lowerMsg.includes("liabilit") || lowerMsg.includes("debt") || lowerMsg.includes("loan")) data = liabRes.rows;
+        else if (lowerMsg.includes("budget")) {
+          // Convert budget grid to more readable format
+          const grid: Record<string, Record<string, number>> = {};
+          for (const r of budgetRes.rows as any[]) {
+            if (!grid[r.category]) grid[r.category] = {};
+            grid[r.category][r.month] = parseFloat(r.value);
+          }
+          data = Object.entries(grid).map(([cat, months]) => ({ category: cat, ...months }));
+        } else if (lowerMsg.includes("summary") || lowerMsg.includes("net worth") || lowerMsg.includes("overview")) {
+          data = { totalAssets: `$${totalAssets.toLocaleString()}`, totalLiabilities: `$${totalLiabilities.toLocaleString()}`, netWorth: `$${(totalAssets - totalLiabilities).toLocaleString()}` };
+        }
+
+        return res.json({ message: cleanText, data, action });
+      } catch (err: any) {
+        return res.json({ message: `⚠️ Failed to reach AI service: ${err.message}` });
+      }
+    }
+
     return res.status(404).json({ error: "Not found", path: url });
   } catch (error: any) {
     console.error("API Error:", error);
