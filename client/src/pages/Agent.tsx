@@ -22,7 +22,7 @@ export default function Agent() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const getToken = () => localStorage.getItem("auth_token") || "";
+  const getToken = () => localStorage.getItem("sonata_session_token") || "";
 
   const sendMessage = async () => {
     const text = input.trim();
