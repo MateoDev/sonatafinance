@@ -17,6 +17,7 @@ import { getChatCompletion, analyzeFinancialData, processNaturalLanguageInput, p
 import { setupAuth, isAuthenticated } from "./auth";
 import { getMarketData } from "./market-data";
 import { plaidRouter } from "./plaid";
+import { agentRouter } from "./agent";
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   setupAuth(app);
@@ -1534,6 +1535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.use("/api", apiRouter);
   app.use("/api/plaid", plaidRouter);
+  app.use("/api/agent", agentRouter);
 
   const httpServer = createServer(app);
   return httpServer;
