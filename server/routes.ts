@@ -16,6 +16,7 @@ import { fromZodError } from "zod-validation-error";
 import { getChatCompletion, analyzeFinancialData, processNaturalLanguageInput, processSpreadsheetData } from "./openai";
 import { setupAuth, isAuthenticated } from "./auth";
 import { getMarketData } from "./market-data";
+import { plaidRouter } from "./plaid";
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication
   setupAuth(app);
@@ -1532,6 +1533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.use("/api", apiRouter);
+  app.use("/api/plaid", plaidRouter);
 
   const httpServer = createServer(app);
   return httpServer;

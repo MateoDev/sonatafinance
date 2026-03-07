@@ -401,3 +401,92 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages)
 
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+// ─── Plaid Integration ───────────────────────────────────────────────
+
+// Plaid items — one per linked institution (Chase, Public, etc.)
+export const plaidItems = pgTable("plaid_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  institutionId: text("institution_id").notNull(),       // e.g. "ins_3"
+  institutionName: text("institution_name").notNull(),    // e.g. "Chase"
+  accessToken: text("access_token").notNull(),            // encrypted Plaid access token
+  itemId: text("item_id").notNull().unique(),             // Plaid item ID
+  cursor: text("cursor"),                                  // transaction sync cursor
+  consentExpiresAt: timestamp("consent_expires_at"),
+  status: text("status").default("active"),                // active | error | revoked
+  errorCode: text("error_code"),
+  products: json("products").$type<string[]>(),            // ["transactions", "investments"]
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlaidItem = typeof plaidItems.$inferSelect;
+export type InsertPlaidItem = typeof plaidItems.$inferInsert;
+
+// Plaid accounts — checking, savings, credit, brokerage per item
+export const plaidAccounts = pgTable("plaid_accounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  plaidItemId: integer("plaid_item_id").notNull(),
+  accountId: text("account_id").notNull().unique(),       // Plaid account_id
+  name: text("name").notNull(),
+  officialName: text("official_name"),
+  type: text("type").notNull(),                            // depository | credit | investment | loan
+  subtype: text("subtype"),                                // checking | savings | credit card | brokerage
+  mask: text("mask"),                                      // last 4 digits
+  currentBalance: numeric("current_balance"),
+  availableBalance: numeric("available_balance"),
+  limit: numeric("credit_limit"),
+  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  hidden: boolean("hidden").default(false),                // user can hide accounts
+  lastSynced: timestamp("last_synced"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlaidAccount = typeof plaidAccounts.$inferSelect;
+export type InsertPlaidAccount = typeof plaidAccounts.$inferInsert;
+
+// Plaid transactions
+export const plaidTransactions = pgTable("plaid_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  accountId: text("account_id").notNull(),                 // Plaid account_id
+  transactionId: text("transaction_id").notNull().unique(), // Plaid transaction_id
+  name: text("name").notNull(),
+  merchantName: text("merchant_name"),
+  amount: numeric("amount").notNull(),                     // positive = debit, negative = credit
+  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  date: text("date").notNull(),                            // YYYY-MM-DD
+  category: json("category").$type<string[]>(),            // Plaid categories
+  personalFinanceCategory: text("personal_finance_category"),
+  pending: boolean("pending").default(false),
+  logoUrl: text("logo_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type PlaidTransaction = typeof plaidTransactions.$inferSelect;
+export type InsertPlaidTransaction = typeof plaidTransactions.$inferInsert;
+
+// Plaid investment holdings
+export const plaidHoldings = pgTable("plaid_holdings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  accountId: text("account_id").notNull(),
+  securityId: text("security_id"),
+  name: text("name").notNull(),
+  ticker: text("ticker"),
+  quantity: numeric("quantity").notNull(),
+  price: numeric("price").notNull(),
+  value: numeric("value").notNull(),
+  costBasis: numeric("cost_basis"),
+  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  type: text("type"),                                      // equity | etf | crypto | fixed income
+  lastSynced: timestamp("last_synced"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlaidHolding = typeof plaidHoldings.$inferSelect;
+export type InsertPlaidHolding = typeof plaidHoldings.$inferInsert;
