@@ -19,6 +19,18 @@ import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
 import Chat from "@/pages/Chat";
 import Notes from "@/pages/Notes";
+import CashFlow from "@/pages/CashFlow";
+import Subscriptions from "@/pages/Subscriptions";
+import Agent from "@/pages/Agent";
+import AppLayout from "@/components/layout/AppLayout";
+
+function ProtectedWithLayout({ component: Component }: { component: React.ComponentType }) {
+  return (
+    <AppLayout>
+      <Component />
+    </AppLayout>
+  );
+}
 
 function App() {
   return (
@@ -39,18 +51,21 @@ function App() {
           <Onboarding />
         </Route>
 
-        {/* Protected routes */}
-        <ProtectedRoute path="/dashboard" component={Dashboard} />
-        <ProtectedRoute path="/investments" component={Investments} />
-        <ProtectedRoute path="/investments/new" component={NewInvestment} />
-        <ProtectedRoute path="/budget" component={Budget} />
-        <ProtectedRoute path="/liabilities" component={Liabilities} />
-        <ProtectedRoute path="/liabilities/new" component={NewLiability} />
-        <ProtectedRoute path="/goals" component={GoalsPage} />
-        <ProtectedRoute path="/profile" component={Profile} />
-        <ProtectedRoute path="/settings" component={Settings} />
-        <ProtectedRoute path="/chat" component={Chat} />
-        <ProtectedRoute path="/notes" component={Notes} />
+        {/* Protected routes with sidebar layout */}
+        <ProtectedRoute path="/dashboard" component={() => <ProtectedWithLayout component={Dashboard} />} />
+        <ProtectedRoute path="/investments" component={() => <ProtectedWithLayout component={Investments} />} />
+        <ProtectedRoute path="/investments/new" component={() => <ProtectedWithLayout component={NewInvestment} />} />
+        <ProtectedRoute path="/budget" component={() => <ProtectedWithLayout component={Budget} />} />
+        <ProtectedRoute path="/liabilities" component={() => <ProtectedWithLayout component={Liabilities} />} />
+        <ProtectedRoute path="/liabilities/new" component={() => <ProtectedWithLayout component={NewLiability} />} />
+        <ProtectedRoute path="/goals" component={() => <ProtectedWithLayout component={GoalsPage} />} />
+        <ProtectedRoute path="/cashflow" component={() => <ProtectedWithLayout component={CashFlow} />} />
+        <ProtectedRoute path="/subscriptions" component={() => <ProtectedWithLayout component={Subscriptions} />} />
+        <ProtectedRoute path="/agent" component={() => <ProtectedWithLayout component={Agent} />} />
+        <ProtectedRoute path="/profile" component={() => <ProtectedWithLayout component={Profile} />} />
+        <ProtectedRoute path="/settings" component={() => <ProtectedWithLayout component={Settings} />} />
+        <ProtectedRoute path="/chat" component={() => <ProtectedWithLayout component={Chat} />} />
+        <ProtectedRoute path="/notes" component={() => <ProtectedWithLayout component={Notes} />} />
 
         {/* Catch-all */}
         <Route>
