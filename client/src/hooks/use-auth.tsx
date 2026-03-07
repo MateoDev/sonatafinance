@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(["/api/user"], userData);
 
       // Check if this is a new user who needs onboarding
-      const isNewUser = !userData.name || userData.name === "" || userData.username?.startsWith("wallet_");
+      const isNewUser = !userData.name || userData.name === "" || userData.name.startsWith("wallet_");
       if (isNewUser) {
         window.location.href = "/onboarding";
         return;
