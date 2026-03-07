@@ -203,8 +203,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!payload) return res.status(401).json({ error: "Not authenticated" });
       const investments = await db.query("SELECT * FROM investments WHERE user_id = $1", [payload.userId]);
       const liabilities = await db.query("SELECT * FROM liabilities WHERE user_id = $1", [payload.userId]);
-      const totalAssets = investments.rows.reduce((sum: number, inv: any) => sum + parseFloat(inv.current_value || inv.cost_basis || 0), 0);
-      const totalLiabilities = liabilities.rows.reduce((sum: number, l: any) => sum + parseFloat(l.current_balance || l.original_amount || 0), 0);
+      const totalAssets = investments.rows.reduce((sum: number, inv: any) => sum + (parseFloat(inv.price || 0) * parseFloat(inv.quantity || 0)), 0);
+      const totalLiabilities = liabilities.rows.reduce((sum: number, l: any) => sum + parseFloat(l.amount || 0), 0);
       return res.json({ totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities, investmentCount: investments.rows.length, liabilityCount: liabilities.rows.length });
     }
 
@@ -248,24 +248,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               break;
             case "add_investment":
               await db.query(
-                `INSERT INTO investments (user_id, name, type, cost_basis, current_value, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-                [userId, p.name, p.type || "other", p.cost_basis || 0, p.current_value || p.cost_basis || 0]
+                `INSERT INTO investments (user_id, symbol, name, type, category, price, quantity, cost_basis, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+                [userId, p.symbol || "", p.name, p.type || "other", p.category || "Other", p.price || 0, p.quantity || 1, p.cost_basis || 0]
               );
               result = { added: true, ...p };
               break;
             case "update_investment":
-              await db.query(`UPDATE investments SET current_value = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.current_value, p.id, userId]);
+              await db.query(`UPDATE investments SET price = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.price, p.id, userId]);
               result = { updated: true, ...p };
               break;
             case "add_liability":
               await db.query(
-                `INSERT INTO liabilities (user_id, name, type, original_amount, current_balance, interest_rate, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-                [userId, p.name, p.type || "other", p.original_amount || 0, p.current_balance || p.original_amount || 0, p.interest_rate || 0]
+                `INSERT INTO liabilities (user_id, name, type, amount, interest_rate, minimum_payment, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+                [userId, p.name, p.type || "other", p.amount || 0, p.interest_rate || 0, p.minimum_payment || 0]
               );
               result = { added: true, ...p };
               break;
             case "update_liability":
-              await db.query(`UPDATE liabilities SET current_balance = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.current_balance, p.id, userId]);
+              await db.query(`UPDATE liabilities SET amount = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.amount, p.id, userId]);
               result = { updated: true, ...p };
               break;
             default:
@@ -278,16 +278,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Gather user data for context
-      const [invRes, liabRes, budgetRes, summaryInv, summaryLiab] = await Promise.all([
-        db.query("SELECT id, name, type, cost_basis, current_value FROM investments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
-        db.query("SELECT id, name, type, original_amount, current_balance, interest_rate FROM liabilities WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
+      const [invRes, liabRes, budgetRes] = await Promise.all([
+        db.query("SELECT id, symbol, name, type, category, price, quantity, cost_basis FROM investments WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
+        db.query("SELECT id, name, type, amount, interest_rate, minimum_payment FROM liabilities WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50", [userId]),
         db.query("SELECT category, month, value FROM budget_grid WHERE user_id = $1 ORDER BY category, month LIMIT 200", [userId]),
-        db.query("SELECT * FROM investments WHERE user_id = $1", [userId]),
-        db.query("SELECT * FROM liabilities WHERE user_id = $1", [userId]),
       ]);
 
-      const totalAssets = summaryInv.rows.reduce((s: number, r: any) => s + parseFloat(r.current_value || r.cost_basis || 0), 0);
-      const totalLiabilities = summaryLiab.rows.reduce((s: number, r: any) => s + parseFloat(r.current_balance || r.original_amount || 0), 0);
+      const totalAssets = invRes.rows.reduce((s: number, r: any) => s + (parseFloat(r.price || 0) * parseFloat(r.quantity || 0)), 0);
+      const totalLiabilities = liabRes.rows.reduce((s: number, r: any) => s + parseFloat(r.amount || 0), 0);
 
       const dataSummary = `
 ## Portfolio Summary
@@ -296,10 +294,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 - Net Worth: $${(totalAssets - totalLiabilities).toLocaleString()}
 
 ## Investments (${invRes.rows.length})
-${invRes.rows.map((r: any) => `- [ID:${r.id}] ${r.name} (${r.type}): cost $${r.cost_basis}, current $${r.current_value}`).join("\n") || "None"}
+${invRes.rows.map((r: any) => `- [ID:${r.id}] ${r.symbol} ${r.name} (${r.type}): ${r.quantity} units @ $${r.price}, cost basis $${r.cost_basis}`).join("\n") || "None"}
 
 ## Liabilities (${liabRes.rows.length})
-${liabRes.rows.map((r: any) => `- [ID:${r.id}] ${r.name} (${r.type}): original $${r.original_amount}, balance $${r.current_balance}, rate ${r.interest_rate}%`).join("\n") || "None"}
+${liabRes.rows.map((r: any) => `- [ID:${r.id}] ${r.name} (${r.type}): $${r.amount}, rate ${r.interest_rate || 0}%`).join("\n") || "None"}
 
 ## Budget Grid (${budgetRes.rows.length} cells)
 ${budgetRes.rows.slice(0, 50).map((r: any) => `- ${r.category} | ${r.month}: $${r.value}`).join("\n") || "None"}`;
@@ -316,10 +314,10 @@ RULES:
 - For write/modification requests, respond with a friendly confirmation message AND include exactly one JSON action block on its own line, wrapped in \`\`\`json ... \`\`\` fences.
 - Available actions and their params:
   - update_budget: { "action": "update_budget", "params": { "month": "Mar '26", "category": "Rent", "value": 4500 } }
-  - add_investment: { "action": "add_investment", "params": { "name": "AAPL", "type": "stock", "cost_basis": 10000, "current_value": 12000 } }
-  - update_investment: { "action": "update_investment", "params": { "id": 123, "current_value": 15000 } }
-  - add_liability: { "action": "add_liability", "params": { "name": "Car Loan", "type": "loan", "original_amount": 25000, "current_balance": 20000, "interest_rate": 5.5 } }
-  - update_liability: { "action": "update_liability", "params": { "id": 456, "current_balance": 18000 } }
+  - add_investment: { "action": "add_investment", "params": { "symbol": "AAPL", "name": "Apple Inc", "type": "stock", "category": "Stocks", "price": 150, "quantity": 10, "cost_basis": 1400 } }
+  - update_investment: { "action": "update_investment", "params": { "id": 123, "price": 160 } }
+  - add_liability: { "action": "add_liability", "params": { "name": "Car Loan", "type": "loan", "amount": 25000, "interest_rate": 5.5, "minimum_payment": 500 } }
+  - update_liability: { "action": "update_liability", "params": { "id": 456, "amount": 18000 } }
 - Only include an action block when the user is requesting a change. For queries, just respond with text.
 - Keep responses short and helpful. Use $ formatting for money.`;
 
@@ -369,10 +367,125 @@ RULES:
           data = { totalAssets: `$${totalAssets.toLocaleString()}`, totalLiabilities: `$${totalLiabilities.toLocaleString()}`, netWorth: `$${(totalAssets - totalLiabilities).toLocaleString()}` };
         }
 
-        return res.json({ message: cleanText, data, action });
+        return res.json({ reply: cleanText, message: cleanText, data, actions: action ? [action] : undefined });
       } catch (err: any) {
         return res.json({ message: `⚠️ Failed to reach AI service: ${err.message}` });
       }
+    }
+
+    // POST /api/agent/action — execute a confirmed action
+    if (url.includes("/api/agent/action") && method === "POST") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const userId = payload.userId;
+      const { action: actionName, params: p } = req.body || {};
+      if (!actionName) return res.status(400).json({ error: "action is required" });
+      try {
+        let result: any = { ok: true };
+        switch (actionName) {
+          case "update_budget":
+            await db.query(
+              `INSERT INTO budget_grid (user_id, category, month, value, updated_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT (user_id, category, month) DO UPDATE SET value = $4, updated_at = NOW()`,
+              [userId, p.category, p.month, p.value]
+            );
+            result = { updated: true, ...p };
+            break;
+          case "add_investment":
+            await db.query(
+              `INSERT INTO investments (user_id, symbol, name, type, category, price, quantity, cost_basis, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+              [userId, p.symbol || "", p.name, p.type || "other", p.category || "Other", p.price || 0, p.quantity || 1, p.cost_basis || 0]
+            );
+            result = { added: true, ...p };
+            break;
+          case "update_investment":
+            await db.query(`UPDATE investments SET price = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.price, p.id, userId]);
+            result = { updated: true, ...p };
+            break;
+          case "add_liability":
+            await db.query(
+              `INSERT INTO liabilities (user_id, name, type, amount, interest_rate, minimum_payment, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+              [userId, p.name, p.type || "other", p.amount || 0, p.interest_rate || 0, p.minimum_payment || 0]
+            );
+            result = { added: true, ...p };
+            break;
+          case "update_liability":
+            await db.query(`UPDATE liabilities SET amount = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [p.amount, p.id, userId]);
+            result = { updated: true, ...p };
+            break;
+          case "add_subscription":
+            await db.query(
+              `INSERT INTO subscriptions (user_id, name, category, amount, due_date, frequency, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+              [userId, p.name, p.category || "Subscriptions", p.amount || 0, p.due_date || null, p.frequency || "monthly"]
+            );
+            result = { added: true, ...p };
+            break;
+          case "delete_subscription":
+            await db.query(`DELETE FROM subscriptions WHERE id = $1 AND user_id = $2`, [p.id, userId]);
+            result = { deleted: true, ...p };
+            break;
+          default:
+            return res.status(400).json({ error: `Unknown action: ${actionName}` });
+        }
+        return res.json({ ok: true, action: actionName, result });
+      } catch (err: any) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    // GET /api/subscriptions
+    if (url.match(/\/api\/subscriptions\/?$/) && method === "GET") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const result = await db.query("SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY category, name", [payload.userId]);
+      return res.json(result.rows);
+    }
+
+    // POST /api/subscriptions
+    if (url.match(/\/api\/subscriptions\/?$/) && method === "POST") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const { name, category, amount, due_date, frequency } = req.body || {};
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const result = await db.query(
+        `INSERT INTO subscriptions (user_id, name, category, amount, due_date, frequency, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING *`,
+        [payload.userId, name, category || "Subscriptions", amount || 0, due_date || null, frequency || "monthly"]
+      );
+      return res.json(result.rows[0]);
+    }
+
+    // DELETE /api/subscriptions/:id
+    if (url.match(/\/api\/subscriptions\/\d+/) && method === "DELETE") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const id = url.match(/\/api\/subscriptions\/(\d+)/)?.[1];
+      await db.query("DELETE FROM subscriptions WHERE id = $1 AND user_id = $2", [id, payload.userId]);
+      return res.json({ ok: true });
+    }
+
+    // POST /api/investments
+    if (url.match(/\/api\/investments\/?$/) && method === "POST") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const { symbol, name, type, category, price, quantity, cost_basis, entity, notes } = req.body || {};
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const result = await db.query(
+        `INSERT INTO investments (user_id, symbol, name, type, category, price, quantity, cost_basis, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING *`,
+        [payload.userId, symbol || "", name, type || "other", category || "Other", price || 0, quantity || 1, cost_basis || 0, notes || null]
+      );
+      return res.json(result.rows[0]);
+    }
+
+    // POST /api/liabilities
+    if (url.match(/\/api\/liabilities\/?$/) && method === "POST") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const { name, type, amount, interest_rate, minimum_payment, due_date, notes } = req.body || {};
+      if (!name) return res.status(400).json({ error: "name is required" });
+      const result = await db.query(
+        `INSERT INTO liabilities (user_id, name, type, amount, interest_rate, minimum_payment, due_date, notes, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING *`,
+        [payload.userId, name, type || "other", amount || 0, interest_rate || 0, minimum_payment || 0, due_date || null, notes || null]
+      );
+      return res.json(result.rows[0]);
     }
 
     return res.status(404).json({ error: "Not found", path: url });

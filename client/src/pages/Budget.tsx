@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, ChevronLeft, ArrowRight as ArrowRightIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, ArrowRight as ArrowRightIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { authFetch } from "@/hooks/use-auth";
 
 // ── Types ──────────────────────────────────────────────────────────────
 type MonthKey = string; // e.g. "2026-01"
@@ -201,9 +202,35 @@ export default function Budget() {
   const [grid, setGrid] = useState<GridData>(buildDefaultGrid);
   const allMonths = monthKeys(FY_YEAR);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  const [scrollMonth, setScrollMonth] = useState(0); // index for mobile
+  const [scrollMonth, setScrollMonth] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Load grid from API
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch("/api/budget/grid");
+        if (res.ok) {
+          const apiGrid: Record<string, Record<string, number>> = await res.json();
+          if (Object.keys(apiGrid).length > 0) {
+            setGrid(prev => {
+              const merged = { ...prev };
+              for (const [cat, months] of Object.entries(apiGrid)) {
+                if (!merged[cat]) merged[cat] = {};
+                for (const [m, v] of Object.entries(months)) {
+                  merged[cat][m] = v;
+                }
+              }
+              return merged;
+            });
+          }
+        }
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -217,6 +244,17 @@ export default function Budget() {
       ...prev,
       [rowId]: { ...prev[rowId], [month]: value }
     }));
+    // Persist to API
+    authFetch("/api/budget/cell", {
+      method: "PATCH",
+      body: JSON.stringify({ category: rowId, month, value }),
+    }).then(r => {
+      if (r.ok) {
+        setSaved(true);
+        if (savedTimer.current) clearTimeout(savedTimer.current);
+        savedTimer.current = setTimeout(() => setSaved(false), 2000);
+      }
+    }).catch(() => {});
   }, []);
 
   const toggleSection = (section: string) => {
@@ -247,9 +285,16 @@ export default function Budget() {
       {/* Header */}
       <div className="border-b border-neutral-800 bg-neutral-900/80 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Budget</h1>
-            <p className="text-xs text-neutral-500">FY {FY_YEAR}</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Budget</h1>
+              <p className="text-xs text-neutral-500">FY {FY_YEAR}</p>
+            </div>
+            {saved && (
+              <span className="flex items-center gap-1 text-xs text-emerald-400 animate-in fade-in duration-300">
+                <Check className="h-3 w-3" /> Saved
+              </span>
+            )}
           </div>
           {/* Mobile month navigator */}
           {isMobile && (
