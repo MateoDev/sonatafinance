@@ -110,6 +110,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json(result.rows);
     }
 
+    // GET /api/budget/grid — returns full budget grid data
+    if (url.match(/\/api\/budget\/grid\/?$/) && method === "GET") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const result = await db.query(
+        "SELECT * FROM budget_grid WHERE user_id = $1",
+        [payload.userId]
+      );
+      // Return as a map: { rowId: { monthKey: value } }
+      const grid: Record<string, Record<string, number>> = {};
+      for (const row of result.rows) {
+        if (!grid[row.category]) grid[row.category] = {};
+        grid[row.category][row.month] = parseFloat(row.value) || 0;
+      }
+      return res.json(grid);
+    }
+
+    // PATCH /api/budget/cell — update a single cell { month, category, value }
+    if (url.match(/\/api\/budget\/cell\/?$/) && method === "PATCH") {
+      const payload = auth();
+      if (!payload) return res.status(401).json({ error: "Not authenticated" });
+      const { month, category, value } = req.body || {};
+      if (!month || !category || value === undefined) {
+        return res.status(400).json({ error: "month, category, and value are required" });
+      }
+      // Upsert
+      await db.query(
+        `INSERT INTO budget_grid (user_id, category, month, value, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (user_id, category, month)
+         DO UPDATE SET value = $4, updated_at = NOW()`,
+        [payload.userId, category, month, value]
+      );
+      return res.json({ ok: true, month, category, value });
+    }
+
     // GET /api/liabilities
     if (url.match(/\/api\/liabilities\/?$/) && method === "GET") {
       const payload = auth();
