@@ -3,7 +3,7 @@ import { useMutation, UseMutationResult } from "@tanstack/react-query";
 import { User } from "@shared/schema";
 import { queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useActiveAccount, useDisconnect } from "thirdweb/react";
+import { useActiveAccount, useDisconnect, useProfiles } from "thirdweb/react";
 import { thirdwebClient } from "@/lib/thirdweb";
 
 // Session token storage
@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const { disconnect } = useDisconnect();
   const account = useActiveAccount();
+  const { data: profiles } = useProfiles({ client: thirdwebClient });
 
   // Check existing session on mount
   useEffect(() => {
@@ -84,9 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Auto-login when ThirdWeb account connects
   useEffect(() => {
     if (account?.address && !user && !isLoading) {
-      login(account.address);
+      // Extract email from ThirdWeb profiles if available
+      const emailProfile = profiles?.find((p: any) => p.type === "email" || p.details?.email);
+      const email = emailProfile?.details?.email || emailProfile?.email || undefined;
+      login(account.address, email);
     }
-  }, [account?.address]);
+  }, [account?.address, profiles]);
 
   const login = useCallback(async (walletAddress: string, email?: string, name?: string) => {
     try {
@@ -161,9 +165,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) throw new Error("Failed to update profile");
       return await res.json();
     },
-    onSuccess: (updatedUser: User) => {
-      setUser(updatedUser);
-      queryClient.setQueryData(["/api/user"], updatedUser);
+    onSuccess: (updatedUser: any) => {
+      // Handle account merge (API returns _newToken when accounts are merged)
+      if (updatedUser._newToken) {
+        setToken(updatedUser._newToken);
+        const { _newToken, ...userData } = updatedUser;
+        setUser(userData);
+        queryClient.setQueryData(["/api/user"], userData);
+      } else {
+        setUser(updatedUser);
+        queryClient.setQueryData(["/api/user"], updatedUser);
+      }
       toast({ title: "Profile updated", description: "Your profile has been updated successfully." });
     },
     onError: (error: Error) => {

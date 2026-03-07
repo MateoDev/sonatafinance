@@ -80,6 +80,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const payload = auth();
       if (!payload) return res.status(401).json({ error: "Not authenticated" });
       const { name, email, profileImage } = req.body || {};
+      
+      // If email is provided, check if another user already has it
+      // If so, merge: transfer this user's wallet to the existing account
+      if (email) {
+        const existing = await db.query("SELECT * FROM users WHERE email = $1 AND id != $2", [email, payload.userId]);
+        if (existing.rows[0]) {
+          // Merge: update the existing user with the current wallet, delete the new duplicate
+          const currentUser = await db.query("SELECT wallet_address FROM users WHERE id = $1", [payload.userId]);
+          if (currentUser.rows[0]?.wallet_address) {
+            await db.query("UPDATE users SET wallet_address = $1, updated_at = NOW() WHERE id = $2", 
+              [currentUser.rows[0].wallet_address, existing.rows[0].id]);
+          }
+          // Update name if provided
+          if (name) {
+            await db.query("UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2", [name, existing.rows[0].id]);
+          }
+          // Delete the duplicate
+          await db.query("DELETE FROM users WHERE id = $1", [payload.userId]);
+          // Return the merged user with a new token
+          const merged = await db.query("SELECT * FROM users WHERE id = $1", [existing.rows[0].id]);
+          const crypto = await import("crypto");
+          const newToken = Buffer.from(JSON.stringify({ userId: existing.rows[0].id, t: Date.now() })).toString("base64url") + "." + crypto.randomBytes(48).toString("hex");
+          const { password: pw, ...safeMerged } = merged.rows[0];
+          return res.json({ ...safeMerged, _newToken: newToken });
+        }
+      }
+      
       const sets: string[] = [];
       const vals: any[] = [];
       let idx = 1;
